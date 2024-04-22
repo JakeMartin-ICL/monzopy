@@ -70,6 +70,7 @@ ACCOUNT_NAMES = {
     "uk_retail_joint": "Joint Account",
     "uk_monzo_flex": "Flex",
     "uk_business": "Business Account",
+    "uk_rewards": "Cashback",
 }
 
 

@@ -1,6 +1,6 @@
 [project]
 name = "monzopy"
-version = "1.0.10"
+version = "1.0.11"
 authors = [
   { name="Jake Martin", email="jake_martin_@outlook.com" },
 ]
