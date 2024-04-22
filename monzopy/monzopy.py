@@ -82,7 +82,6 @@ class UserAccount:
         self._request = request
         self._account_ids: set[str] = set()
         self._webhook_ids: list[str] = []
-        self._current_account_id = 0
 
     async def accounts(self) -> list[dict[str, Any]]:
         """List accounts and their balances."""
@@ -111,15 +110,17 @@ class UserAccount:
 
     async def pots(self) -> list[dict[str, Any]]:
         """List pots and their balance."""
-        if self._current_account_id == 0:
+        if not self._account_ids:
             await self._get_accounts()
-        pots = await self._request(
-            "get", "pots", params={"current_account_id": self._current_account_id}
-        )
-        try:
-            valid_pots = [pot for pot in pots["pots"] if pot["deleted"] is False]
-        except KeyError:
-            raise InvalidMonzoAPIResponseError
+        valid_pots = []
+        for account_id in self._account_ids:
+            pots = await self._request(
+                "get", "pots", params={"current_account_id": account_id}
+            )
+            try:
+                valid_pots += [pot for pot in pots["pots"] if pot["deleted"] is False]
+            except KeyError:
+                raise InvalidMonzoAPIResponseError
         return valid_pots
 
     async def _get_accounts(self) -> list[dict[str, Any]]:
@@ -130,8 +131,6 @@ class UserAccount:
                 if acc["type"] not in INVALID_ACCOUNT_TYPES:
                     self._account_ids.add(acc["id"])
                     valid_accounts.append(acc)
-                    if acc["type"] == CURRENT_ACCOUNT:
-                        self._current_account_id = acc["id"]
         except KeyError:
             raise InvalidMonzoAPIResponseError
         return valid_accounts
