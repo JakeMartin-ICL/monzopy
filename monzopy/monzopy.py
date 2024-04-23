@@ -1,4 +1,5 @@
-"""API for Monzo bound to Home Assistant OAuth."""
+"""API for Monzo."""
+
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
 from datetime import datetime
@@ -10,7 +11,7 @@ API_URL_BASE = "https://api.monzo.com"
 
 
 class AbstractMonzoApi(ABC):  # pylint: disable=too-few-public-methods
-    """Define an object to work with the AirVisual Cloud API."""
+    """An abstract class for accessing the Monzo API."""
 
     def __init__(self, session: ClientSession) -> None:
         """Initialize.
