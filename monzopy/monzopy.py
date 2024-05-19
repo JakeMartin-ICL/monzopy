@@ -74,13 +74,15 @@ ACCOUNT_NAMES = {
     "uk_rewards": "Cashback",
 }
 
+TOKEN_EXPIRY_CODE = "unauthorized.bad_access_token.expired"
+CODE = "code"
 
 class UserAccount:
     """Define an object representing a Monzo account holder."""
 
-    def __init__(self, request: Callable[..., Awaitable]) -> None:
+    def __init__(self, request: Callable[..., Awaitable[dict[str, Any]]]) -> None:
         """Initialise the account."""
-        self._request = request
+        self._request: Callable[..., Awaitable[dict[str, Any]]] = request
         self._account_ids: set[str] = set()
         self._webhook_ids: list[str] = []
 
@@ -121,7 +123,7 @@ class UserAccount:
             try:
                 valid_pots += [pot for pot in pots["pots"] if pot["deleted"] is False]
             except KeyError:
-                raise InvalidMonzoAPIResponseError
+                _raise_auth_or_response_error(pots)
         return valid_pots
 
     async def _get_accounts(self) -> list[dict[str, Any]]:
@@ -133,7 +135,7 @@ class UserAccount:
                     self._account_ids.add(acc["id"])
                     valid_accounts.append(acc)
         except KeyError:
-            raise InvalidMonzoAPIResponseError
+            _raise_auth_or_response_error(res)
         return valid_accounts
 
     async def pot_deposit(self, account_id: str, pot_id: str, amount: int) -> bool:
@@ -196,9 +198,23 @@ class UserAccount:
         for webhook_id in await self.list_webhooks():
             await self._request("delete", f"webhooks/{webhook_id}")
 
+async def _authorisation_expired(response: dict[str, Any]) -> bool:
+    return CODE in response and response[CODE] == TOKEN_EXPIRY_CODE
+
+async def _raise_auth_or_response_error(response: dict[str, Any]) -> None:
+    if _authorisation_expired(response):
+        raise AuthorisationExpiredError
+    raise InvalidMonzoAPIResponseError
 
 class InvalidMonzoAPIResponseError(Exception):
     """Error thrown when the external Monzo API returns an invalid response."""
+
+    def __init__(self, *args: object) -> None:
+        """Initialise error."""
+        super().__init__(*args)
+
+class AuthorisationExpiredError(Exception):
+    """Error thrown when the external Monzo API authentication has expired."""
 
     def __init__(self, *args: object) -> None:
         """Initialise error."""
