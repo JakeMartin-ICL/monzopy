@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Any
 
 from aiohttp import ClientSession
+from urllib.parse import urlparse
 
 API_URL_BASE = "https://api.monzo.com"
 
@@ -177,8 +178,10 @@ class UserAccount:
             except KeyError:
                 raise InvalidMonzoAPIResponseError
 
-    async def list_webhooks(self) -> list[str]:
-        """List all webhooks registered on the account."""
+    async def list_webhooks(self, host: str = None) -> list[str]:
+        """List all webhooks registered on the account, optionally filtering by host."""
+        if host:
+            host = urlparse(host).hostname
         if not self._account_ids:
             await self._get_accounts()
         webhook_ids = []
@@ -188,14 +191,15 @@ class UserAccount:
             )
             try:
                 for webhook in res["webhooks"]:
-                    webhook_ids.append(webhook["id"])
+                    if not host or host == urlparse(webhook["url"]).hostname:
+                        webhook_ids.append(webhook["id"])
             except KeyError:
                 raise InvalidMonzoAPIResponseError
         return webhook_ids
 
-    async def unregister_webhooks(self) -> None:
-        """Unregister all webhooks."""
-        for webhook_id in await self.list_webhooks():
+    async def unregister_webhooks(self, host: str = None) -> None:
+        """Unregister all webhooks, optionally filtering by host."""
+        for webhook_id in await self.list_webhooks(host):
             await self._request("delete", f"webhooks/{webhook_id}")
 
 async def _authorisation_expired(response: dict[str, Any]) -> bool:
