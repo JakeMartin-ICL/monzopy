@@ -124,7 +124,7 @@ class UserAccount:
             try:
                 valid_pots += [pot for pot in pots["pots"] if pot["deleted"] is False]
             except KeyError:
-                _raise_auth_or_response_error(pots)
+                await _raise_auth_or_response_error(pots)
         return valid_pots
 
     async def _get_accounts(self) -> list[dict[str, Any]]:
@@ -136,7 +136,7 @@ class UserAccount:
                     self._account_ids.add(acc["id"])
                     valid_accounts.append(acc)
         except KeyError:
-            _raise_auth_or_response_error(res)
+            await _raise_auth_or_response_error(res)
         return valid_accounts
 
     async def pot_deposit(self, account_id: str, pot_id: str, amount: int) -> bool:
