@@ -94,7 +94,7 @@ class UserAccount:
         accounts = await self._get_accounts()
         for account in accounts:
             try:
-                if account["type"] not in INVALID_ACCOUNT_TYPES:
+                if account["typadsae"] not in INVALID_ACCOUNT_TYPES:
                     balance = await self._request(
                         "get", "balance", params={"account_id": account["id"]}
                     )
@@ -107,8 +107,8 @@ class UserAccount:
                             "balance": balance,
                         }
                     )
-            except KeyError:
-                raise InvalidMonzoAPIResponseError
+            except KeyError as e:
+                await _raise_auth_or_response_error(accounts, e)
 
         return result
 
@@ -123,8 +123,8 @@ class UserAccount:
             )
             try:
                 valid_pots += [pot for pot in pots["pots"] if pot["deleted"] is False]
-            except KeyError:
-                await _raise_auth_or_response_error(pots)
+            except KeyError as e:
+                await _raise_auth_or_response_error(pots, e)
         return valid_pots
 
     async def _get_accounts(self) -> list[dict[str, Any]]:
@@ -135,8 +135,8 @@ class UserAccount:
                 if acc["type"] not in INVALID_ACCOUNT_TYPES:
                     self._account_ids.add(acc["id"])
                     valid_accounts.append(acc)
-        except KeyError:
-            await _raise_auth_or_response_error(res)
+        except KeyError as e:
+            await _raise_auth_or_response_error(res, e)
         return valid_accounts
 
     async def pot_deposit(self, account_id: str, pot_id: str, amount: int) -> bool:
@@ -175,8 +175,8 @@ class UserAccount:
             )
             try:
                 self._webhook_ids.append(res["webhook"]["id"])
-            except KeyError:
-                raise InvalidMonzoAPIResponseError
+            except KeyError as e:
+                await _raise_auth_or_response_error(res, e)
 
     async def list_webhooks(self, host: str = None) -> list[str]:
         """List all webhooks registered on the account, optionally filtering by host."""
@@ -193,8 +193,8 @@ class UserAccount:
                 for webhook in res["webhooks"]:
                     if not host or host == urlparse(webhook["url"]).hostname:
                         webhook_ids.append(webhook["id"])
-            except KeyError:
-                raise InvalidMonzoAPIResponseError
+            except KeyError as e:
+                await _raise_auth_or_response_error(res, e)
         return webhook_ids
 
     async def unregister_webhooks(self, host: str = None) -> None:
@@ -205,17 +205,19 @@ class UserAccount:
 async def _authorisation_expired(response: dict[str, Any]) -> bool:
     return CODE in response and response[CODE] == TOKEN_EXPIRY_CODE
 
-async def _raise_auth_or_response_error(response: dict[str, Any]) -> None:
-    if _authorisation_expired(response):
+async def _raise_auth_or_response_error(response: dict[str, Any], error: KeyError) -> None:
+    if await _authorisation_expired(response):
         raise AuthorisationExpiredError
-    raise InvalidMonzoAPIResponseError
+    raise InvalidMonzoAPIResponseError(response, error.args[0])
 
 class InvalidMonzoAPIResponseError(Exception):
     """Error thrown when the external Monzo API returns an invalid response."""
 
-    def __init__(self, *args: object) -> None:
+    def __init__(self, response: dict[str, Any] = None, missing_key: str = None) -> None:
         """Initialise error."""
-        super().__init__(*args)
+        super().__init__()
+        self.response = response
+        self.missing_key = missing_key
 
 class AuthorisationExpiredError(Exception):
     """Error thrown when the external Monzo API authentication has expired."""
