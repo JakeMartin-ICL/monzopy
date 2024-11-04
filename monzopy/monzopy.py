@@ -94,7 +94,7 @@ class UserAccount:
         accounts = await self._get_accounts()
         for account in accounts:
             try:
-                if account["typadsae"] not in INVALID_ACCOUNT_TYPES:
+                if account["type"] not in INVALID_ACCOUNT_TYPES:
                     balance = await self._request(
                         "get", "balance", params={"account_id": account["id"]}
                     )
