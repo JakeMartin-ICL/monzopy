@@ -150,7 +150,10 @@ class UserAccount:
                 "dedupe_id": datetime.now(),
             },
         )
-        return "id" in res
+        if "id" not in res:
+            await _raise_auth_or_response_error(res)
+        else:
+            return True
 
     async def pot_withdraw(self, account_id: str, pot_id: str, amount: int) -> bool:
         """Withdraw money from a pot to a specified account."""
@@ -163,7 +166,10 @@ class UserAccount:
                 "dedupe_id": datetime.now(),
             },
         )
-        return "id" in res
+        if "id" not in res:
+            await _raise_auth_or_response_error(res)
+        else:
+            return True
 
     async def register_webhooks(self, webhook_url: str) -> None:
         """Register webhooks for all bank accounts."""
@@ -205,10 +211,10 @@ class UserAccount:
 async def _authorisation_expired(response: dict[str, Any]) -> bool:
     return CODE in response and response[CODE] == TOKEN_EXPIRY_CODE
 
-async def _raise_auth_or_response_error(response: dict[str, Any], error: KeyError) -> None:
+async def _raise_auth_or_response_error(response: dict[str, Any], error: KeyError = None) -> None:
     if await _authorisation_expired(response):
         raise AuthorisationExpiredError
-    raise InvalidMonzoAPIResponseError(response, error.args[0])
+    raise InvalidMonzoAPIResponseError(response, error.args[0] or None)
 
 class InvalidMonzoAPIResponseError(Exception):
     """Error thrown when the external Monzo API returns an invalid response."""
