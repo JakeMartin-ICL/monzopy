@@ -76,6 +76,8 @@ ACCOUNT_NAMES = {
 }
 
 TOKEN_EXPIRY_CODE = "unauthorized.bad_access_token.expired"
+INSUFFICIENT_PERMISSIONS_CODE = "forbidden.insufficient_permissions"
+AUTH_EXPIRY_CODES = [TOKEN_EXPIRY_CODE, INSUFFICIENT_PERMISSIONS_CODE]
 CODE = "code"
 
 class UserAccount:
@@ -209,7 +211,7 @@ class UserAccount:
             await self._request("delete", f"webhooks/{webhook_id}")
 
 async def _authorisation_expired(response: dict[str, Any]) -> bool:
-    return CODE in response and response[CODE] == TOKEN_EXPIRY_CODE
+    return CODE in response and response[CODE] in AUTH_EXPIRY_CODES
 
 async def _raise_auth_or_response_error(response: dict[str, Any], error: KeyError = None) -> None:
     if await _authorisation_expired(response):
