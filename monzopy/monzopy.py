@@ -2,11 +2,12 @@
 
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Any, NoReturn
+from urllib.parse import urlparse
 
 from aiohttp import ClientSession
-from urllib.parse import urlparse
 
 API_URL_BASE = "https://api.monzo.com"
 
@@ -34,7 +35,7 @@ class AbstractMonzoApi(ABC):  # pylint: disable=too-few-public-methods
         endpoint: str,
         *,
         base_url: str = API_URL_BASE,
-        **kwargs: dict[str, Any],
+        **kwargs: Any,
     ) -> dict[str, Any]:
         """Make a request."""
         headers = kwargs.get("headers")
@@ -80,6 +81,16 @@ INSUFFICIENT_PERMISSIONS_CODE = "forbidden.insufficient_permissions"
 AUTH_EXPIRY_CODES = [TOKEN_EXPIRY_CODE, INSUFFICIENT_PERMISSIONS_CODE]
 CODE = "code"
 
+
+@dataclass(frozen=True)
+class Webhook:
+    """A webhook registered with Monzo for an account."""
+
+    id: str
+    account_id: str
+    url: str
+
+
 class UserAccount:
     """Define an object representing a Monzo account holder."""
 
@@ -95,22 +106,18 @@ class UserAccount:
 
         accounts = await self._get_accounts()
         for account in accounts:
-            try:
-                if account["type"] not in INVALID_ACCOUNT_TYPES:
-                    balance = await self._request(
-                        "get", "balance", params={"account_id": account["id"]}
-                    )
+            balance = await self._request(
+                "get", "balance", params={"account_id": account["id"]}
+            )
 
-                    result.append(
-                        {
-                            "id": account["id"],
-                            "name": ACCOUNT_NAMES.get(account["type"], account["type"]),
-                            "type": account["type"],
-                            "balance": balance,
-                        }
-                    )
-            except KeyError as e:
-                await _raise_auth_or_response_error(accounts, e)
+            result.append(
+                {
+                    "id": account["id"],
+                    "name": ACCOUNT_NAMES.get(account["type"], account["type"]),
+                    "type": account["type"],
+                    "balance": balance,
+                }
+            )
 
         return result
 
@@ -126,7 +133,7 @@ class UserAccount:
             try:
                 valid_pots += [pot for pot in pots["pots"] if pot["deleted"] is False]
             except KeyError as e:
-                await _raise_auth_or_response_error(pots, e)
+                _raise_auth_or_response_error(pots, e.args[0] if e.args else None)
         return valid_pots
 
     async def _get_accounts(self) -> list[dict[str, Any]]:
@@ -138,7 +145,7 @@ class UserAccount:
                     self._account_ids.add(acc["id"])
                     valid_accounts.append(acc)
         except KeyError as e:
-            await _raise_auth_or_response_error(res, e)
+            _raise_auth_or_response_error(res, e.args[0] if e.args else None)
         return valid_accounts
 
     async def pot_deposit(self, account_id: str, pot_id: str, amount: int) -> bool:
@@ -153,7 +160,7 @@ class UserAccount:
             },
         )
         if "id" not in res:
-            await _raise_auth_or_response_error(res)
+            _raise_auth_or_response_error(res)
         else:
             return True
 
@@ -169,63 +176,106 @@ class UserAccount:
             },
         )
         if "id" not in res:
-            await _raise_auth_or_response_error(res)
+            _raise_auth_or_response_error(res)
         else:
             return True
+
+    async def register_webhook(self, account_id: str, url: str) -> Webhook:
+        """Register a webhook for a single account."""
+        response = await self._request(
+            "post", "webhooks", data={"account_id": account_id, "url": url}
+        )
+        if "webhook" not in response or not isinstance(response["webhook"], dict):
+            _raise_auth_or_response_error(response, "webhook")
+        return _parse_webhook(response["webhook"], response)
+
+    async def list_account_webhooks(self, account_id: str) -> list[Webhook]:
+        """List all webhooks registered for a single account."""
+        response = await self._request(
+            "get", "webhooks", params={"account_id": account_id}
+        )
+        if "webhooks" not in response or not isinstance(response["webhooks"], list):
+            _raise_auth_or_response_error(response, "webhooks")
+
+        webhooks = []
+        for webhook in response["webhooks"]:
+            if not isinstance(webhook, dict):
+                _raise_auth_or_response_error(response, "webhooks")
+            webhooks.append(_parse_webhook(webhook, response))
+        return webhooks
+
+    async def delete_webhook(self, webhook_id: str) -> None:
+        """Delete a webhook by ID."""
+        response = await self._request("delete", f"webhooks/{webhook_id}")
+        if response:
+            _raise_auth_or_response_error(response)
 
     async def register_webhooks(self, webhook_url: str) -> None:
         """Register webhooks for all bank accounts."""
         if not self._account_ids:
             await self._get_accounts()
         for account_id in self._account_ids:
-            res = await self._request(
-                "post", "webhooks", data={"account_id": account_id, "url": webhook_url}
-            )
-            try:
-                self._webhook_ids.append(res["webhook"]["id"])
-            except KeyError as e:
-                await _raise_auth_or_response_error(res, e)
+            webhook = await self.register_webhook(account_id, webhook_url)
+            self._webhook_ids.append(webhook.id)
 
-    async def list_webhooks(self, host: str = None) -> list[str]:
+    async def list_webhooks(self, host: str | None = None) -> list[str]:
         """List all webhooks registered on the account, optionally filtering by host."""
-        if host:
-            host = urlparse(host).hostname
+        hostname = _parse_hostname(host) if host else None
         if not self._account_ids:
             await self._get_accounts()
         webhook_ids = []
         for account_id in self._account_ids:
-            res = await self._request(
-                "get", "webhooks", params={"account_id": account_id}
-            )
-            try:
-                for webhook in res["webhooks"]:
-                    if not host or host == urlparse(webhook["url"]).hostname:
-                        webhook_ids.append(webhook["id"])
-            except KeyError as e:
-                await _raise_auth_or_response_error(res, e)
+            for webhook in await self.list_account_webhooks(account_id):
+                if not hostname or hostname == urlparse(webhook.url).hostname:
+                    webhook_ids.append(webhook.id)
         return webhook_ids
 
-    async def unregister_webhooks(self, host: str = None) -> None:
+    async def unregister_webhooks(self, host: str | None = None) -> None:
         """Unregister all webhooks, optionally filtering by host."""
         for webhook_id in await self.list_webhooks(host):
-            await self._request("delete", f"webhooks/{webhook_id}")
+            await self.delete_webhook(webhook_id)
 
-async def _authorisation_expired(response: dict[str, Any]) -> bool:
+
+def _parse_webhook(webhook: dict[str, Any], response: dict[str, Any]) -> Webhook:
+    """Parse and validate a webhook returned by Monzo."""
+    values = {}
+    for field in ("id", "account_id", "url"):
+        if field not in webhook or not isinstance(webhook[field], str):
+            _raise_auth_or_response_error(response, field)
+        values[field] = webhook[field]
+    return Webhook(**values)
+
+
+def _parse_hostname(host: str) -> str:
+    """Extract a hostname from either a URL or a bare hostname."""
+    return urlparse(host).hostname or urlparse(f"//{host}").hostname or host
+
+
+def _authorisation_expired(response: dict[str, Any]) -> bool:
     return CODE in response and response[CODE] in AUTH_EXPIRY_CODES
 
-async def _raise_auth_or_response_error(response: dict[str, Any], error: KeyError = None) -> None:
-    if await _authorisation_expired(response):
+
+def _raise_auth_or_response_error(
+    response: dict[str, Any], missing_key: str | None = None
+) -> NoReturn:
+    if _authorisation_expired(response):
         raise AuthorisationExpiredError
-    raise InvalidMonzoAPIResponseError(response, error.args[0] or None)
+    raise InvalidMonzoAPIResponseError(response, missing_key)
+
 
 class InvalidMonzoAPIResponseError(Exception):
     """Error thrown when the external Monzo API returns an invalid response."""
 
-    def __init__(self, response: dict[str, Any] = None, missing_key: str = None) -> None:
+    def __init__(
+        self,
+        response: dict[str, Any] | None = None,
+        missing_key: str | None = None,
+    ) -> None:
         """Initialise error."""
         super().__init__()
         self.response = response
         self.missing_key = missing_key
+
 
 class AuthorisationExpiredError(Exception):
     """Error thrown when the external Monzo API authentication has expired."""
