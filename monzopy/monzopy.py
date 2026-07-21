@@ -106,22 +106,18 @@ class UserAccount:
 
         accounts = await self._get_accounts()
         for account in accounts:
-            try:
-                if account["type"] not in INVALID_ACCOUNT_TYPES:
-                    balance = await self._request(
-                        "get", "balance", params={"account_id": account["id"]}
-                    )
+            balance = await self._request(
+                "get", "balance", params={"account_id": account["id"]}
+            )
 
-                    result.append(
-                        {
-                            "id": account["id"],
-                            "name": ACCOUNT_NAMES.get(account["type"], account["type"]),
-                            "type": account["type"],
-                            "balance": balance,
-                        }
-                    )
-            except KeyError as e:
-                _raise_auth_or_response_error(account, e.args[0] if e.args else None)
+            result.append(
+                {
+                    "id": account["id"],
+                    "name": ACCOUNT_NAMES.get(account["type"], account["type"]),
+                    "type": account["type"],
+                    "balance": balance,
+                }
+            )
 
         return result
 
