@@ -4,20 +4,29 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "monzopy"
-version = "1.5.1"
+version = "1.6.0"
 authors = [
   { name="Jake Martin", email="jake_martin_@outlook.com" },
 ]
 description = "A simple async python wrapper for the Monzo API, used primarily by the Monzo Home Assistant integration."
 readme = "README.md"
-requires-python = ">=3.7"
+requires-python = ">=3.14"
 classifiers = [
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.14",
     "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
     "Operating System :: OS Independent",
 ]
 dependencies = [
     "aiohttp >= 3.0.0"
+]
+
+[project.optional-dependencies]
+dev = [
+    "mypy >= 1.10",
+    "pytest >= 8.0",
+    "pytest-asyncio >= 0.23",
+    "ruff >= 0.5",
 ]
 
 [project.urls]
@@ -26,3 +35,18 @@ dependencies = [
 
 [tool.setuptools.package-data]
 "monzopy" = ["py.typed"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[tool.mypy]
+check_untyped_defs = true
+files = ["monzopy", "tests"]
