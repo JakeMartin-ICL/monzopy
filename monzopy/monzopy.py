@@ -220,7 +220,7 @@ class UserAccount:
 
     async def list_webhooks(self, host: str | None = None) -> list[str]:
         """List all webhooks registered on the account, optionally filtering by host."""
-        hostname = urlparse(host).hostname if host else None
+        hostname = _parse_hostname(host) if host else None
         if not self._account_ids:
             await self._get_accounts()
         webhook_ids = []
@@ -244,6 +244,11 @@ def _parse_webhook(webhook: dict[str, Any], response: dict[str, Any]) -> Webhook
             _raise_auth_or_response_error(response, field)
         values[field] = webhook[field]
     return Webhook(**values)
+
+
+def _parse_hostname(host: str) -> str:
+    """Extract a hostname from either a URL or a bare hostname."""
+    return urlparse(host).hostname or urlparse(f"//{host}").hostname or host
 
 
 def _authorisation_expired(response: dict[str, Any]) -> bool:

@@ -215,7 +215,8 @@ async def test_register_webhooks_registers_once_for_every_known_account() -> Non
 
 
 @pytest.mark.asyncio
-async def test_list_webhooks_preserves_hostname_filtering() -> None:
+@pytest.mark.parametrize("host", ["https://example.com/callback", "example.com"])
+async def test_list_webhooks_preserves_hostname_filtering(host: str) -> None:
     request = AsyncMock(
         return_value={
             "webhooks": [
@@ -231,7 +232,7 @@ async def test_list_webhooks_preserves_hostname_filtering() -> None:
     account = UserAccount(request)
     account._account_ids.add("account-1")
 
-    assert await account.list_webhooks("https://example.com/callback") == ["webhook-1"]
+    assert await account.list_webhooks(host) == ["webhook-1"]
 
 
 @pytest.mark.asyncio
@@ -261,4 +262,32 @@ async def test_unregister_webhooks_deletes_every_listed_webhook() -> None:
         call("get", "webhooks", params={"account_id": "account-1"}),
         call("delete", "webhooks/webhook-1"),
         call("delete", "webhooks/webhook-2"),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_unregister_webhooks_with_raw_hostname_deletes_only_matches() -> None:
+    request = AsyncMock(
+        side_effect=[
+            {
+                "webhooks": [
+                    WEBHOOK,
+                    {
+                        "id": "webhook-2",
+                        "account_id": "account-1",
+                        "url": "https://other.example/monzo",
+                    },
+                ]
+            },
+            {},
+        ]
+    )
+    account = UserAccount(request)
+    account._account_ids.add("account-1")
+
+    await account.unregister_webhooks("example.com")
+
+    assert request.await_args_list == [
+        call("get", "webhooks", params={"account_id": "account-1"}),
+        call("delete", "webhooks/webhook-1"),
     ]
