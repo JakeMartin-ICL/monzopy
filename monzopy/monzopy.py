@@ -131,7 +131,11 @@ class UserAccount:
                 "get", "pots", params={"current_account_id": account_id}
             )
             try:
-                valid_pots += [pot for pot in pots["pots"] if pot["deleted"] is False]
+                valid_pots += [
+                    {**pot, "current_account_id": account_id}
+                    for pot in pots["pots"]
+                    if pot["deleted"] is False
+                ]
             except KeyError as e:
                 _raise_auth_or_response_error(pots, e.args[0] if e.args else None)
         return valid_pots
