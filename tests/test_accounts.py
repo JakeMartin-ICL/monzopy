@@ -42,6 +42,22 @@ async def test_accounts_preserve_api_metadata() -> None:
     assert "name" not in raw_account
 
 
+async def test_loan_account_name() -> None:
+    """Test loan accounts have a human-readable name."""
+    account = UserAccount(
+        AsyncMock(
+            side_effect=[
+                {"accounts": [{"id": "loan-1", "type": "uk_loan"}]},
+                {"balance": -1234, "total_balance": -1234, "currency": "GBP"},
+            ]
+        )
+    )
+
+    result = await account.accounts()
+
+    assert result[0]["name"] == "Loan"
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("missing_key", ["id", "type"])
 async def test_accounts_preserve_full_malformed_api_response(
