@@ -1,6 +1,13 @@
 # monzopy
 A simple async python wrapper for the Monzo API, used primarily by the Monzo Home Assistant integration.
 
+## Transactions
+
+`await user_account.annotate_transaction(transaction_id, metadata)` adds or updates
+transaction metadata and returns the updated transaction. Set a value to an empty
+string to delete that key. Updating the `notes` key also updates the transaction's
+top-level notes property.
+
 ## Webhooks
 
 `UserAccount` provides ownership-safe primitives for managing webhooks on a specific

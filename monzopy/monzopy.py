@@ -1,7 +1,7 @@
 """API for Monzo."""
 
 from abc import ABC, abstractmethod
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, NoReturn
@@ -179,6 +179,21 @@ class UserAccount:
             _raise_auth_or_response_error(res)
         else:
             return True
+
+    async def annotate_transaction(
+        self, transaction_id: str, metadata: Mapping[str, str]
+    ) -> dict[str, Any]:
+        """Add, update, or delete metadata on a transaction."""
+        response = await self._request(
+            "patch",
+            f"transactions/{transaction_id}",
+            data={f"metadata[{key}]": value for key, value in metadata.items()},
+        )
+        if "transaction" not in response or not isinstance(
+            response["transaction"], dict
+        ):
+            _raise_auth_or_response_error(response, "transaction")
+        return response["transaction"]
 
     async def register_webhook(self, account_id: str, url: str) -> Webhook:
         """Register a webhook for a single account."""
