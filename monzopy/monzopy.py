@@ -1,7 +1,7 @@
 """API for Monzo."""
 
 from abc import ABC, abstractmethod
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, NoReturn
@@ -73,6 +73,7 @@ ACCOUNT_NAMES = {
     "uk_retail_joint": "Joint Account",
     "uk_monzo_flex": "Flex",
     "uk_business": "Business Account",
+    "uk_loan": "Loan",
     "uk_rewards": "Cashback",
 }
 
@@ -112,9 +113,8 @@ class UserAccount:
 
             result.append(
                 {
-                    "id": account["id"],
+                    **account,
                     "name": ACCOUNT_NAMES.get(account["type"], account["type"]),
-                    "type": account["type"],
                     "balance": balance,
                 }
             )
@@ -179,6 +179,55 @@ class UserAccount:
             _raise_auth_or_response_error(res)
         else:
             return True
+
+    async def annotate_transaction(
+        self, transaction_id: str, metadata: Mapping[str, str]
+    ) -> dict[str, Any]:
+        """Add, update, or delete metadata on a transaction."""
+        response = await self._request(
+            "patch",
+            f"transactions/{transaction_id}",
+            data={f"metadata[{key}]": value for key, value in metadata.items()},
+        )
+        if "transaction" not in response or not isinstance(
+            response["transaction"], dict
+        ):
+            _raise_auth_or_response_error(response, "transaction")
+        return response["transaction"]
+
+    async def create_feed_item(
+        self,
+        account_id: str,
+        title: str,
+        image_url: str,
+        *,
+        body: str | None = None,
+        url: str | None = None,
+        background_color: str | None = None,
+        title_color: str | None = None,
+        body_color: str | None = None,
+    ) -> None:
+        """Create a basic feed item for an account."""
+        data = {
+            "account_id": account_id,
+            "type": "basic",
+            "params[title]": title,
+            "params[image_url]": image_url,
+        }
+        optional_fields = {
+            "params[body]": body,
+            "url": url,
+            "params[background_color]": background_color,
+            "params[title_color]": title_color,
+            "params[body_color]": body_color,
+        }
+        data.update(
+            {key: value for key, value in optional_fields.items() if value is not None}
+        )
+
+        response = await self._request("post", "feed", data=data)
+        if response:
+            _raise_auth_or_response_error(response)
 
     async def register_webhook(self, account_id: str, url: str) -> Webhook:
         """Register a webhook for a single account."""
