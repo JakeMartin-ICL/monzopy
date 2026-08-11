@@ -195,6 +195,40 @@ class UserAccount:
             _raise_auth_or_response_error(response, "transaction")
         return response["transaction"]
 
+    async def create_feed_item(
+        self,
+        account_id: str,
+        title: str,
+        image_url: str,
+        *,
+        body: str | None = None,
+        url: str | None = None,
+        background_color: str | None = None,
+        title_color: str | None = None,
+        body_color: str | None = None,
+    ) -> None:
+        """Create a basic feed item for an account."""
+        data = {
+            "account_id": account_id,
+            "type": "basic",
+            "params[title]": title,
+            "params[image_url]": image_url,
+        }
+        optional_fields = {
+            "params[body]": body,
+            "url": url,
+            "params[background_color]": background_color,
+            "params[title_color]": title_color,
+            "params[body_color]": body_color,
+        }
+        data.update(
+            {key: value for key, value in optional_fields.items() if value is not None}
+        )
+
+        response = await self._request("post", "feed", data=data)
+        if response:
+            _raise_auth_or_response_error(response)
+
     async def register_webhook(self, account_id: str, url: str) -> Webhook:
         """Register a webhook for a single account."""
         response = await self._request(

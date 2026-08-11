@@ -8,6 +8,12 @@ transaction metadata and returns the updated transaction. Set a value to an empt
 string to delete that key. Updating the `notes` key also updates the transaction's
 top-level notes property.
 
+## Feed items
+
+`await user_account.create_feed_item(account_id, title, image_url, ...)` creates a
+basic item in an account's Monzo feed. It accepts optional body text, a URL to open
+when tapped, and background, title, and body colours.
+
 ## Webhooks
 
 `UserAccount` provides ownership-safe primitives for managing webhooks on a specific
